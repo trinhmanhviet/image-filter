@@ -32,13 +32,13 @@ class ImageClassifierApp:
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
         self.left_frame_container = tk.Frame(self.main_frame, width=250)
-        self.main_frame.add(self.left_frame_container, minsize=150)
+        self.main_frame.add(self.left_frame_container, minsize=250, stretch='never')
 
         self.center_frame = tk.Frame(self.main_frame)
         self.main_frame.add(self.center_frame, stretch='always')
 
         self.right_frame_container = tk.Frame(self.main_frame, width=250)
-        self.main_frame.add(self.right_frame_container, minsize=150)
+        self.main_frame.add(self.right_frame_container, minsize=250, stretch='never')
 
         self.menu = tk.Menu(self.root)
         self.root.config(menu=self.menu)
@@ -69,19 +69,18 @@ class ImageClassifierApp:
         self.canvas = tk.Canvas(self.center_frame, bg="black")
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        # Configure grid so filter header has fixed height and rated list expands
         self.right_frame_container.grid_rowconfigure(0, weight=0)
         self.right_frame_container.grid_rowconfigure(1, weight=1)
-        self.right_frame_container.grid_columnconfigure(0, weight=1)
         self.right_frame_container.grid_columnconfigure(0, weight=1)
 
         filter_frame = tk.Frame(self.right_frame_container)
         filter_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
         tk.Label(filter_frame, text="Filter by rating:").pack(side=tk.LEFT, padx=10, pady=2)
-        self.filter_combobox = ttk.Combobox(filter_frame, values=["All", 1, 2, 3, 4, 5], width=8)
-        self.filter_combobox.set("All")
-        self.filter_combobox.pack(side=tk.LEFT, padx=5, pady=2)
-        self.filter_combobox.bind("<<ComboboxSelected>>", self.apply_filter)
+        self.filter_var = tk.StringVar(value="All")
+        options = ["All", 1, 2, 3, 4, 5]
+        self.filter_menu = tk.OptionMenu(filter_frame, self.filter_var, *options, command=self.apply_filter)
+        self.filter_menu.config(width=8)
+        self.filter_menu.pack(side=tk.LEFT, padx=5, pady=2)
 
         self.rated_canvas = tk.Canvas(self.right_frame_container)
         self.rated_scroll = tk.Scrollbar(self.right_frame_container, orient=tk.VERTICAL, command=self.rated_canvas.yview)
@@ -177,7 +176,7 @@ class ImageClassifierApp:
     def update_thumbnail_size(self, val):
         self.thumb_size = int(val)
         self.display_thumbnails()
-        self.update_rated_list()  # this now runs after throttling
+        self.update_rated_list()
 
     def select_image(self, idx):
         self.image_index = idx
@@ -231,9 +230,8 @@ class ImageClassifierApp:
             self.display_image()
             self.highlight_selected_thumbnail()
 
-    def apply_filter(self, event):
-        selection = self.filter_combobox.get()
-        self.filtered_star = None if selection == "All" else int(selection)
+    def apply_filter(self, value):
+        self.filtered_star = None if value == "All" else int(value)
         self.update_rated_list()
 
     def update_rated_list(self):
