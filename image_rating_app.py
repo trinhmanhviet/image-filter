@@ -22,6 +22,8 @@ class ImageClassifierApp:
         self.image_cache = {}
 
         self.active_canvas = None
+        self.tk_img = None
+        self.current_img_path = None
 
         self.setup_ui()
         self.bind_keys()
@@ -68,6 +70,7 @@ class ImageClassifierApp:
 
         self.canvas = tk.Canvas(self.center_frame, bg="black")
         self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.canvas.bind("<Configure>", lambda e: self.refresh_displayed_image())
 
         self.right_frame_container.grid_rowconfigure(0, weight=0)
         self.right_frame_container.grid_rowconfigure(1, weight=1)
@@ -186,17 +189,20 @@ class ImageClassifierApp:
     def display_image(self):
         if not self.image_list or self.image_index >= len(self.image_list):
             return
-        img_path = self.image_list[self.image_index]
-        if (img_path, 'full') not in self.image_cache:
-            image = Image.open(img_path)
-            w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
-            image.thumbnail((w, h))
-            self.image_cache[(img_path, 'full')] = ImageTk.PhotoImage(image)
-        self.tk_img = self.image_cache[(img_path, 'full')]
-        self.canvas.delete("all")
+        self.current_img_path = self.image_list[self.image_index]
+        self.refresh_displayed_image()
+        self.update_rating_buttons(self.current_img_path)
+
+    def refresh_displayed_image(self):
+        if not self.current_img_path:
+            return
+        img_path = self.current_img_path
+        image = Image.open(img_path)
         w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
+        image.thumbnail((w, h))
+        self.tk_img = ImageTk.PhotoImage(image)
+        self.canvas.delete("all")
         self.canvas.create_image(w // 2, h // 2, image=self.tk_img)
-        self.update_rating_buttons(img_path)
 
     def update_rating_buttons(self, img_path):
         rating = self.image_ratings.get(img_path, 0)
