@@ -28,17 +28,17 @@ class ImageClassifierApp:
 
     def setup_ui(self):
         self._thumb_update_job = None
-        self.main_frame = tk.Frame(self.root)
+        self.main_frame = tk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.left_frame = tk.Frame(self.main_frame, width=250)
-        self.left_frame.pack(side=tk.LEFT, fill=tk.Y)
+        self.left_frame_container = tk.Frame(self.main_frame, width=250)
+        self.main_frame.add(self.left_frame_container, minsize=150)
 
         self.center_frame = tk.Frame(self.main_frame)
-        self.center_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.main_frame.add(self.center_frame, stretch='always')
 
-        self.right_frame = tk.Frame(self.main_frame, width=250)
-        self.right_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        self.right_frame_container = tk.Frame(self.main_frame, width=250)
+        self.main_frame.add(self.right_frame_container, minsize=150)
 
         self.menu = tk.Menu(self.root)
         self.root.config(menu=self.menu)
@@ -46,44 +46,52 @@ class ImageClassifierApp:
         self.menu.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Import Folder", command=self.import_folder)
 
-        self.thumb_canvas = tk.Canvas(self.left_frame)
-        self.thumb_scroll = tk.Scrollbar(self.left_frame, orient=tk.VERTICAL, command=self.thumb_canvas.yview)
+        self.left_frame_container.grid_rowconfigure(1, weight=1)
+        self.left_frame_container.grid_columnconfigure(0, weight=1)
+        self.thumb_canvas = tk.Canvas(self.left_frame_container)
+        self.thumb_scroll = tk.Scrollbar(self.left_frame_container, orient=tk.VERTICAL, command=self.thumb_canvas.yview)
         self.thumb_frame = tk.Frame(self.thumb_canvas)
 
         self.thumb_canvas.create_window((0, 0), window=self.thumb_frame, anchor="nw")
         self.thumb_canvas.configure(yscrollcommand=self.thumb_scroll.set)
 
-        self.thumb_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.thumb_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.thumb_canvas.grid(row=1, column=0, sticky="nsew")
+        self.thumb_scroll.grid(row=1, column=1, sticky="ns")
 
         self.thumb_frame.bind("<Configure>", lambda e: self.thumb_canvas.configure(scrollregion=self.thumb_canvas.bbox("all")))
         self.thumb_canvas.bind("<Enter>", lambda e: self.set_active_canvas(self.thumb_canvas))
         self.thumb_canvas.bind("<Leave>", lambda e: self.set_active_canvas(None))
 
-        self.thumb_slider = tk.Scale(self.left_frame, from_=40, to=160, label="Thumbnail Size", orient=tk.HORIZONTAL, command=self.schedule_thumbnail_update)
+        self.thumb_slider = tk.Scale(self.left_frame_container, from_=40, to=160, label="Thumbnail Size", orient=tk.HORIZONTAL, command=self.schedule_thumbnail_update)
         self.thumb_slider.set(self.thumb_size)
-        self.thumb_slider.pack(fill=tk.X)
+        self.thumb_slider.grid(row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(2, 0))
 
         self.canvas = tk.Canvas(self.center_frame, bg="black")
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        self.filter_label = tk.Label(self.right_frame, text="Filter by rating:")
-        self.filter_label.pack(anchor="ne", padx=10, pady=5)
+        # Configure grid so filter header has fixed height and rated list expands
+        self.right_frame_container.grid_rowconfigure(0, weight=0)
+        self.right_frame_container.grid_rowconfigure(1, weight=1)
+        self.right_frame_container.grid_columnconfigure(0, weight=1)
+        self.right_frame_container.grid_columnconfigure(0, weight=1)
 
-        self.filter_combobox = ttk.Combobox(self.right_frame, values=["All", 1, 2, 3, 4, 5], width=10)
+        filter_frame = tk.Frame(self.right_frame_container)
+        filter_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+        tk.Label(filter_frame, text="Filter by rating:").pack(side=tk.LEFT, padx=10, pady=2)
+        self.filter_combobox = ttk.Combobox(filter_frame, values=["All", 1, 2, 3, 4, 5], width=8)
         self.filter_combobox.set("All")
-        self.filter_combobox.pack(anchor="ne", padx=10)
+        self.filter_combobox.pack(side=tk.LEFT, padx=5, pady=2)
         self.filter_combobox.bind("<<ComboboxSelected>>", self.apply_filter)
 
-        self.rated_canvas = tk.Canvas(self.right_frame)
-        self.rated_scroll = tk.Scrollbar(self.right_frame, orient=tk.VERTICAL, command=self.rated_canvas.yview)
+        self.rated_canvas = tk.Canvas(self.right_frame_container)
+        self.rated_scroll = tk.Scrollbar(self.right_frame_container, orient=tk.VERTICAL, command=self.rated_canvas.yview)
         self.rated_frame = tk.Frame(self.rated_canvas)
 
         self.rated_canvas.create_window((0, 0), window=self.rated_frame, anchor="nw")
         self.rated_canvas.configure(yscrollcommand=self.rated_scroll.set)
 
-        self.rated_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.rated_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.rated_canvas.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        self.rated_scroll.grid(row=1, column=2, sticky="ns")
 
         self.rated_frame.bind("<Configure>", lambda e: self.rated_canvas.configure(scrollregion=self.rated_canvas.bbox("all")))
         self.rated_canvas.bind("<Enter>", lambda e: self.set_active_canvas(self.rated_canvas))
@@ -115,6 +123,10 @@ class ImageClassifierApp:
         self._thumb_update_job = self.root.after(150, lambda: self.update_thumbnail_size(val))
 
     def bind_keys(self):
+        self.root.bind("<Down>", lambda e: self.move_selection(1))
+        self.root.bind("<Right>", lambda e: self.move_selection(1))
+        self.root.bind("<Up>", lambda e: self.move_selection(-1))
+        self.root.bind("<Left>", lambda e: self.move_selection(-1))
         for i in range(1, 6):
             self.root.bind(str(i), lambda e, i=i: self.rate_image(i))
         self.root.bind("<space>", lambda e: self.skip_image())
@@ -200,6 +212,15 @@ class ImageClassifierApp:
         self.update_rating_buttons(img_path)
         self.update_rated_list()
         self.next_image()
+
+    def move_selection(self, direction):
+        if not self.image_list:
+            return
+        new_index = self.image_index + direction
+        if 0 <= new_index < len(self.image_list):
+            self.image_index = new_index
+            self.display_image()
+            self.highlight_selected_thumbnail()
 
     def skip_image(self):
         self.next_image()
