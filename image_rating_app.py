@@ -56,7 +56,7 @@ class ImageClassifierApp:
 
         self.menu = tk.Menu(self.root)
         self.root.config(menu=self.menu)
-        file_menu = tk.Menu(self.menu)
+        file_menu = tk.Menu(self.menu, tearoff=0)
         self.menu.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Import Folder", command=self.import_folder)
 
