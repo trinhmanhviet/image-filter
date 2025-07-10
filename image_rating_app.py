@@ -149,6 +149,15 @@ class ImageClassifierApp:
 
         tk.Button(self.bottom_frame, text="Skip", command=self.skip_image).pack(side=tk.LEFT, padx=10)
         tk.Button(self.bottom_frame, text="Copy Filtered Images", command=self.copy_filtered_images).pack(side=tk.RIGHT, padx=10)
+        tk.Button(self.bottom_frame, text="Clear", command=self.confirm_clear_ratings).pack(side=tk.RIGHT, padx=10)
+        
+    def confirm_clear_ratings(self):
+        result = messagebox.askyesno("Clear Ratings", "Are you sure you want to clear all ratings?")
+        if result:
+            self.image_ratings.clear()
+            self.update_rating_buttons(self.current_img_path)
+            self.update_rated_list()
+            self.highlight_selected_thumbnail()
 
     def on_drop(self, event):
         paths = self.root.tk.splitlist(event.data)
@@ -212,6 +221,7 @@ class ImageClassifierApp:
                 if answer == "replace":
                     self.image_ratings.clear()
                     self.current_page = 0
+                    self.update_rated_list()
                 self.display_image()
                 self.update_thumbnails()
                 progress_popup.destroy()
@@ -468,6 +478,7 @@ class ImageClassifierApp:
         selection = self.filter_var.get()
         self.filtered_star = None if selection == "All" else int(selection)
         self.update_rated_list()
+        self.highlight_selected_thumbnail()
 
     def update_rated_list(self):
         for widget in self.rated_frame.winfo_children():
@@ -497,12 +508,20 @@ class ImageClassifierApp:
                     compound="left",
                     anchor="w"
                 )
+                panel.bind("<Button-1>", lambda e, path=path: self.jump_to_image(path))
                 panel.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
                 frame.pack(fill=tk.X, pady=1)
                 
         self.filter_count_var.set(f"{len(self.rated_thumbs)} image(s)")
-        
+    
+    def jump_to_image(self, path):
+        if path in self.image_list:
+            idx = self.image_list.index(path)
+            self.image_index = idx
+            self.current_page = self.image_index // self.page_size
+            self.display_image()
+            self.highlight_selected_thumbnail()
+    
     def show_about_popup(self):
         popup = tk.Toplevel(self.root)
         popup.title("About Me")
