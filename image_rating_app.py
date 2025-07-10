@@ -38,12 +38,22 @@ class ImageClassifierApp:
 
         self.status_var = tk.StringVar()
         self.thumb_resize_job = None  # <-- Added here
+        self.active_scroll_area = None
 
         self.supported_extensions = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".webp")
 
         self.setup_ui()
         self.bind_keys()
 
+    def enable_scroll(self, area):
+        self.active_scroll_area = area
+        self.root.bind_all("<MouseWheel>", self.mousewheel_scroll)
+
+    def disable_scroll(self, area):
+        if self.active_scroll_area == area:
+            self.root.unbind_all("<MouseWheel>")
+            self.active_scroll_area = None
+        
     def set_widgets_state(self, state):
         for child in self.root.winfo_children():
             try:
@@ -87,12 +97,13 @@ class ImageClassifierApp:
         self.thumb_canvas.configure(yscrollcommand=self.thumb_scrollbar.set)
 
         self.thumb_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.thumb_canvas.bind("<Enter>", lambda e: self.enable_scroll("thumb"))
+        self.thumb_canvas.bind("<Leave>", lambda e: self.disable_scroll("thumb"))
         self.root.drop_target_register(DND_FILES)
         self.root.dnd_bind('<<Drop>>', self.on_drop)
         self.thumb_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.thumb_frame.bind("<Configure>", self.on_thumb_configure)
-        self.thumb_canvas.bind_all("<MouseWheel>", self.mousewheel_scroll)
 
         self.canvas = tk.Canvas(self.center_frame, bg="black")
         self.canvas.pack(fill=tk.BOTH, expand=True)
@@ -122,6 +133,8 @@ class ImageClassifierApp:
         self.rated_canvas.configure(yscrollcommand=self.rated_scroll.set)
 
         self.rated_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.rated_canvas.bind("<Enter>", lambda e: self.enable_scroll("rated"))
+        self.rated_canvas.bind("<Leave>", lambda e: self.disable_scroll("rated"))
         self.rated_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.rated_frame.bind("<Configure>", lambda e: self.rated_canvas.configure(scrollregion=self.rated_canvas.bbox("all")))
@@ -156,19 +169,55 @@ class ImageClassifierApp:
 
         answer = self.ask_add_or_replace()
 
-        if answer == "add":
-            self.image_list.extend(dropped_files)
-            self.image_list = sorted(set(self.image_list))  # Remove duplicates
-            self.display_image()
-            self.update_thumbnails()
+        if answer in ("add", "replace"):
+            progress_popup = tk.Toplevel(self.root)
+            progress_popup.title("Loading Images")
+            progress_popup.geometry("400x100")
+            progress_popup.transient(self.root)
+            progress_popup.grab_set()
 
-        elif answer == "new":
-            self.image_list = dropped_files
-            self.image_index = 0
-            self.image_ratings.clear()
-            self.current_page = 0
-            self.display_image()
-            self.update_thumbnails()
+            progress_popup.update_idletasks()
+            popup_w, popup_h = 400, 100
+            root_w = self.root.winfo_width()
+            root_h = self.root.winfo_height()
+            root_x = self.root.winfo_x()
+            root_y = self.root.winfo_y()
+            center_x = root_x + (root_w // 2) - (popup_w // 2)
+            center_y = root_y + (root_h // 2) - (popup_h // 2)
+            progress_popup.geometry(f"{popup_w}x{popup_h}+{center_x}+{center_y}")
+
+            label = tk.Label(progress_popup, text="Loading images...")
+            label.pack(pady=5)
+
+            progress = ttk.Progressbar(progress_popup, orient="horizontal", length=300, mode="determinate")
+            progress.pack(pady=5)
+
+            self.root.update()
+
+            def load_images():
+                self.set_widgets_state("disabled")
+                new_files = dropped_files if answer == "replace" else self.image_list + dropped_files
+                new_files = sorted(set(new_files))
+                total = len(new_files)
+                progress.config(maximum=total)
+
+                for idx, path in enumerate(new_files):
+                    self.get_cached_image(path, self.thumb_size)
+                    progress['value'] = idx + 1
+                    label.config(text=f"Loading {idx + 1}/{total} images...")
+                    self.root.update_idletasks()
+
+                self.image_list = new_files
+                self.image_index = 0
+                if answer == "replace":
+                    self.image_ratings.clear()
+                    self.current_page = 0
+                self.display_image()
+                self.update_thumbnails()
+                progress_popup.destroy()
+                self.set_widgets_state("normal")
+
+            threading.Thread(target=load_images, daemon=True).start()
 
         # if "cancel", do nothing
     
@@ -178,6 +227,16 @@ class ImageClassifierApp:
         popup.geometry("350x100")
         popup.transient(self.root)
         popup.grab_set()
+        # Centerlize
+        popup.update_idletasks()
+        popup_w, popup_h = 350, 100
+        root_w = self.root.winfo_width()
+        root_h = self.root.winfo_height()
+        root_x = self.root.winfo_x()
+        root_y = self.root.winfo_y()
+        center_x = root_x + (root_w // 2) - (popup_w // 2)
+        center_y = root_y + (root_h // 2) - (popup_h // 2)
+        popup.geometry(f"{popup_w}x{popup_h}+{center_x}+{center_y}")
 
         result = tk.StringVar(value="cancel")
 
@@ -187,7 +246,7 @@ class ImageClassifierApp:
         btn_frame.pack()
 
         tk.Button(btn_frame, text="Add", width=10, command=lambda: [result.set("add"), popup.destroy()]).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="New Set", width=10, command=lambda: [result.set("new"), popup.destroy()]).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Replace", width=10, command=lambda: [result.set("replace"), popup.destroy()]).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Cancel", width=10, command=lambda: popup.destroy()).pack(side=tk.LEFT, padx=5)
 
         self.root.wait_window(popup)
@@ -206,7 +265,10 @@ class ImageClassifierApp:
         self.root.bind("<space>", lambda e: self.skip_image())
 
     def mousewheel_scroll(self, event):
-        self.thumb_canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+        if self.active_scroll_area == "thumb":
+            self.thumb_canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+        elif self.active_scroll_area == "rated":
+            self.rated_canvas.yview_scroll(-1 * int(event.delta / 120), "units")
 
     def import_folder(self):
         folder = filedialog.askdirectory()
@@ -319,7 +381,7 @@ class ImageClassifierApp:
         self.image_index = idx
         self.current_page = self.image_index // self.page_size
         self.display_image()
-        self.update_thumbnails()
+        self.highlight_selected_thumbnail()
 
     def move_selection(self, direction):
         new_index = self.image_index + direction
@@ -329,7 +391,18 @@ class ImageClassifierApp:
             if new_page != self.current_page:
                 self.current_page = new_page
             self.display_image()
-            self.update_thumbnails()
+            self.highlight_selected_thumbnail()
+            
+    def highlight_selected_thumbnail(self):
+        children = self.thumb_frame.winfo_children()
+        local_index = self.image_index - self.current_page * self.page_size
+
+        for i, child in enumerate(children):
+            panel = child.winfo_children()[1] if len(child.winfo_children()) > 1 else child
+            bg_color = "#a6d4fa" if i == local_index else "SystemButtonFace"
+            panel.config(bg=bg_color)
+            
+        self.ensure_visible()
 
     def update_thumbnail_size(self, val):
         if self.thumb_resize_job:
@@ -386,6 +459,7 @@ class ImageClassifierApp:
         self.update_rating_buttons(img_path)
         self.update_rated_list()
         self.move_selection(1)
+        self.highlight_selected_thumbnail()
 
     def skip_image(self):
         self.move_selection(1)
@@ -443,11 +517,10 @@ class ImageClassifierApp:
         y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (400 // 2)
         popup.geometry(f"+{x}+{y}")
 
-        tk.Label(popup, text="Name: Manh Viet", font=("Arial", 12)).pack(pady=(20, 5))
-        tk.Label(popup, text="Email: trinhmanhviet@gmail.com", font=("Arial", 10)).pack(pady=5)
+        tk.Label(popup, text="By: Manh Viet", font=("Arial", 12)).pack(pady=(20, 5))
         tk.Label(popup, text="Thanks for using my application", font=("Arial", 10, "italic")).pack(pady=(5, 20))
 
-        tk.Label(popup, text="\n\nQR code for donate if you like:", font=("Arial", 10, "bold")).pack(pady=(0, 5))
+        tk.Label(popup, text="\nQR code for donate if you like my work:", font=("Arial", 10, "bold")).pack(pady=(0, 5))
 
         try:
             qr_data = base64.b64decode(qr_code_base64)
