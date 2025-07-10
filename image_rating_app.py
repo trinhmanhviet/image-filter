@@ -1,6 +1,7 @@
 import os
 import shutil
 import tkinter as tk
+from tkinterdnd2 import DND_FILES, TkinterDnD
 from tkinter import filedialog, ttk
 from PIL import Image, ImageTk
 import threading
@@ -72,6 +73,8 @@ class ImageClassifierApp:
         self.thumb_canvas.configure(yscrollcommand=self.thumb_scrollbar.set)
 
         self.thumb_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.root.drop_target_register(DND_FILES)
+        self.root.dnd_bind('<<Drop>>', self.on_drop)
         self.thumb_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.thumb_frame.bind("<Configure>", self.on_thumb_configure)
@@ -119,6 +122,62 @@ class ImageClassifierApp:
 
         tk.Button(self.bottom_frame, text="Skip", command=self.skip_image).pack(side=tk.LEFT, padx=10)
         tk.Button(self.bottom_frame, text="Copy Filtered Images", command=self.copy_filtered_images).pack(side=tk.RIGHT, padx=10)
+
+    def on_drop(self, event):
+        paths = self.root.tk.splitlist(event.data)
+
+        # Filter supported image files or directories
+        dropped_files = []
+        for path in paths:
+            if os.path.isdir(path):
+                for f in os.listdir(path):
+                    full_path = os.path.join(path, f)
+                    if f.lower().endswith(self.supported_extensions):
+                        dropped_files.append(full_path)
+            elif path.lower().endswith(self.supported_extensions):
+                dropped_files.append(path)
+
+        if not dropped_files:
+            return
+
+        answer = self.ask_add_or_replace()
+
+        if answer == "add":
+            self.image_list.extend(dropped_files)
+            self.image_list = sorted(set(self.image_list))  # Remove duplicates
+            self.display_image()
+            self.update_thumbnails()
+
+        elif answer == "new":
+            self.image_list = dropped_files
+            self.image_index = 0
+            self.image_ratings.clear()
+            self.current_page = 0
+            self.display_image()
+            self.update_thumbnails()
+
+        # if "cancel", do nothing
+    
+    def ask_add_or_replace(self):
+        popup = tk.Toplevel(self.root)
+        popup.title("Add or Replace Thumbnails?")
+        popup.geometry("350x100")
+        popup.transient(self.root)
+        popup.grab_set()
+
+        result = tk.StringVar(value="cancel")
+
+        tk.Label(popup, text="Do you want to add new images or replace the current list?").pack(pady=10)
+
+        btn_frame = tk.Frame(popup)
+        btn_frame.pack()
+
+        tk.Button(btn_frame, text="Add", width=10, command=lambda: [result.set("add"), popup.destroy()]).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="New Set", width=10, command=lambda: [result.set("new"), popup.destroy()]).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Cancel", width=10, command=lambda: popup.destroy()).pack(side=tk.LEFT, padx=5)
+
+        self.root.wait_window(popup)
+        return result.get()
 
     def on_thumb_configure(self, event):
         self.thumb_canvas.configure(scrollregion=self.thumb_canvas.bbox("all"))
@@ -315,6 +374,6 @@ class ImageClassifierApp:
                 shutil.copy(img_path, os.path.join(target_dir, os.path.basename(img_path)))
 
 if __name__ == '__main__':
-    root = tk.Tk()
+    root = TkinterDnD.Tk()
     app = ImageClassifierApp(root)
     root.mainloop()
