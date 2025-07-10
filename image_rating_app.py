@@ -92,6 +92,10 @@ class ImageClassifierApp:
         self.filter_menu = tk.OptionMenu(filter_frame, self.filter_var, *options, command=self.apply_filter)
         self.filter_menu.config(width=8)
         self.filter_menu.pack(side=tk.LEFT, padx=5)
+        
+        self.filter_count_var = tk.StringVar(value="0 images")
+        self.filter_count_label = tk.Label(self.right_frame, textvariable=self.filter_count_var, anchor="w")
+        self.filter_count_label.pack(fill=tk.X, padx=10, pady=(0, 5))
 
         self.rated_canvas = tk.Canvas(self.right_frame)
         self.rated_scroll = tk.Scrollbar(self.right_frame, orient=tk.VERTICAL, command=self.rated_canvas.yview)
@@ -299,6 +303,8 @@ class ImageClassifierApp:
                 self.rated_thumbs.append(tk_img)
                 panel = tk.Label(self.rated_frame, image=tk_img, text=os.path.basename(path), compound="left", anchor="w")
                 panel.pack(fill=tk.X, pady=1)
+                
+        self.filter_count_var.set(f"{len(self.rated_thumbs)} image(s)")
 
     def copy_filtered_images(self):
         target_dir = filedialog.askdirectory()
