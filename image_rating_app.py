@@ -124,6 +124,15 @@ class ImageClassifierApp:
         self.filter_count_var = tk.StringVar(value="0 images")
         self.filter_count_label = tk.Label(self.right_frame, textvariable=self.filter_count_var, anchor="w")
         self.filter_count_label.pack(fill=tk.X, padx=10, pady=(0, 5))
+        
+        self.filter_button_frame = tk.Frame(self.right_frame)
+        self.filter_button_frame.pack(side=tk.BOTTOM, pady=10)
+
+        self.clear_button = tk.Button(self.filter_button_frame, text="Clear", command=self.clear_all_ratings)
+        self.clear_button.pack(side=tk.LEFT, padx=5)
+
+        self.copy_button = tk.Button(self.filter_button_frame, text="Copy Filtered Images", command=self.copy_filtered_images)
+        self.copy_button.pack(side=tk.LEFT, padx=5)
 
         self.rated_canvas = tk.Canvas(self.right_frame)
         self.rated_scroll = tk.Scrollbar(self.right_frame, orient=tk.VERTICAL, command=self.rated_canvas.yview)
@@ -136,28 +145,49 @@ class ImageClassifierApp:
         self.rated_canvas.bind("<Enter>", lambda e: self.enable_scroll("rated"))
         self.rated_canvas.bind("<Leave>", lambda e: self.disable_scroll("rated"))
         self.rated_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.right_buttons_frame = tk.Frame(self.right_frame)
+        self.right_buttons_frame.pack(fill=tk.X, pady=(5, 10))
+        
+        btn_inner = tk.Frame(self.right_buttons_frame)
+        btn_inner.pack(anchor="center")
 
         self.rated_frame.bind("<Configure>", lambda e: self.rated_canvas.configure(scrollregion=self.rated_canvas.bbox("all")))
 
-        self.bottom_frame = tk.Frame(self.root)
+        self.bottom_frame = tk.Frame(self.root, pady=8)
         self.bottom_frame.pack(fill=tk.X)
 
-        for i in range(1, 6):
-            btn = tk.Button(self.bottom_frame, text="☆", width=4, command=lambda i=i: self.rate_image(i))
-            btn.pack(side=tk.LEFT, padx=2)
-            self.rating_buttons.append(btn)
+        stars_frame = tk.Frame(self.bottom_frame)
+        stars_frame.pack(side=tk.TOP)
 
-        tk.Button(self.bottom_frame, text="Skip", command=self.skip_image).pack(side=tk.LEFT, padx=10)
-        tk.Button(self.bottom_frame, text="Copy Filtered Images", command=self.copy_filtered_images).pack(side=tk.RIGHT, padx=10)
-        tk.Button(self.bottom_frame, text="Clear", command=self.confirm_clear_ratings).pack(side=tk.RIGHT, padx=10)
-        
+        for i in range(1, 6):
+            btn = tk.Button(stars_frame, text="☆", width=4, command=lambda i=i: self.rate_image(i))
+            btn.pack(side=tk.LEFT, padx=4)
+
+        tk.Button(stars_frame, text="Skip", width=6, command=self.skip_image).pack(side=tk.LEFT, padx=10)
+                
+    def clear_all_ratings(self):
+        if not self.image_ratings:
+            return  # Không làm gì nếu chưa có đánh giá
+
+        if not messagebox.askyesno("Confirm", "Do you want to clear all ratings?"):
+            return
+
+        self.image_ratings.clear()
+        self.update_thumbnails()
+        self.update_rated_list()
+
     def confirm_clear_ratings(self):
+        if not self.image_ratings:
+            return  # Không có gì để xóa
+
         result = messagebox.askyesno("Clear Ratings", "Are you sure you want to clear all ratings?")
         if result:
             self.image_ratings.clear()
             self.update_rating_buttons(self.current_img_path)
             self.update_rated_list()
             self.highlight_selected_thumbnail()
+
 
     def on_drop(self, event):
         paths = self.root.tk.splitlist(event.data)
@@ -176,7 +206,11 @@ class ImageClassifierApp:
         if not dropped_files:
             return
 
-        answer = self.ask_add_or_replace()
+        if not self.image_list:
+            answer = "replace"  # Không có ảnh → tự động replace
+        else:
+            answer = self.ask_add_or_replace()
+
 
         if answer in ("add", "replace"):
             progress_popup = tk.Toplevel(self.root)
@@ -513,6 +547,9 @@ class ImageClassifierApp:
                 frame.pack(fill=tk.X, pady=1)
                 
         self.filter_count_var.set(f"{len(self.rated_thumbs)} image(s)")
+        has_rated = bool(self.rated_thumbs)
+        self.clear_button.config(state="normal" if has_rated else "disabled")
+        self.copy_button.config(state="normal" if has_rated else "disabled")
     
     def jump_to_image(self, path):
         if path in self.image_list:
@@ -553,9 +590,13 @@ class ImageClassifierApp:
         tk.Button(popup, text="Close", command=popup.destroy).pack(pady=10)
 
     def copy_filtered_images(self):
+        if not self.image_ratings:
+            return  # Không có ảnh nào đã đánh giá
+
         target_dir = filedialog.askdirectory()
         if not target_dir:
             return
+
         for img_path, rating in self.image_ratings.items():
             if self.filtered_star is None or rating == self.filtered_star:
                 shutil.copy(img_path, os.path.join(target_dir, os.path.basename(img_path)))
